@@ -14,10 +14,16 @@ using namespace itch;
 // ---------------------------------------------------------------------------
 class BookTest : public ::testing::Test {
 protected:
-    // Small pool for unit tests — enough for all cases
     OrderBook book{512};
+    uint64_t  next_ref_ = 1;
 
-    uint64_t next_ref_ = 1;
+    void SetUp() override {
+        // Simulate market open so on_add accepts orders.
+        itch::SystemEventMsg open{};
+        open.msg_type   = 'S';
+        open.event_code = 'O';
+        book.on_system_event(open);
+    }
 
     AddOrderMsg make_add(char side, uint32_t price_raw, uint32_t shares) {
         AddOrderMsg m{};
@@ -80,6 +86,45 @@ protected:
 // bid=$150.00=1,500,000  ask=$150.01=1,500,100  (1 tick / $0.01 spread)
 static constexpr uint32_t kBid = 1'500'000;
 static constexpr uint32_t kAsk = 1'500'100;
+
+// ---------------------------------------------------------------------------
+// Session state (SystemEvent)
+// ---------------------------------------------------------------------------
+TEST_F(BookTest, SystemEvent_PreOpen_OrdersIgnored) {
+    OrderBook closed_book{16}; // never opened
+    itch::SystemEventMsg open{};
+    open.msg_type = 'S'; open.event_code = 'O';
+    // do NOT call on_system_event — book stays closed
+    closed_book.on_add(make_add('B', kBid, 100));
+    EXPECT_EQ(closed_book.order_count(), 0u);
+    EXPECT_EQ(closed_book.best_bid_offer().bid_price, 0u);
+}
+
+TEST_F(BookTest, SystemEvent_Close_StopsNewOrders) {
+    book.on_add(make_add('B', kBid, 100)); // accepted (book is open from SetUp)
+    EXPECT_EQ(book.order_count(), 1u);
+
+    itch::SystemEventMsg close{};
+    close.msg_type = 'S'; close.event_code = 'C';
+    book.on_system_event(close);
+
+    book.on_add(make_add('B', kBid, 200)); // rejected
+    EXPECT_EQ(book.order_count(), 1u);
+}
+
+TEST_F(BookTest, SystemEvent_Halt_DrainsBook) {
+    book.on_add(make_add('B', kBid, 100));
+    book.on_add(make_add('S', kAsk, 200));
+    EXPECT_EQ(book.order_count(), 2u);
+
+    itch::SystemEventMsg halt{};
+    halt.msg_type = 'S'; halt.event_code = 'H';
+    book.on_system_event(halt);
+
+    EXPECT_EQ(book.order_count(), 0u);
+    EXPECT_FALSE(book.is_open());
+    EXPECT_EQ(book.best_bid_offer().bid_price, 0u);
+}
 
 // ---------------------------------------------------------------------------
 // Basic add

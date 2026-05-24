@@ -131,6 +131,34 @@ void OrderBook::recentre_asks(uint32_t new_ref) noexcept {
 // Public message handlers
 // ---------------------------------------------------------------------------
 
+void OrderBook::on_system_event(const itch::SystemEventMsg& msg) noexcept {
+    switch (msg.event_code) {
+    case 'O':  // Market open — begin accepting orders
+        is_open_ = true;
+        break;
+    case 'C':  // Market close — stop accepting new orders
+        is_open_ = false;
+        break;
+    case 'H':  // Trading halt — drain all live orders from the book
+        is_open_ = false;
+        for (auto& [ref, o] : order_map_) {
+            o->next = o->prev = nullptr;
+            o->level_idx = -1;
+        }
+        for (auto& lvl : bid_levels_) lvl = PriceLevel{};
+        for (auto& lvl : ask_levels_) lvl = PriceLevel{};
+        best_bid_idx_ = -1;
+        best_ask_idx_ = -1;
+        order_map_.clear();
+        // Note: pool_ slots are not freed individually — just reset the free list
+        // by reconstructing. In production use a generation counter instead.
+        pool_ = OrderPool(pool_.capacity());
+        break;
+    default:
+        break;
+    }
+}
+
 static Order* make_order(OrderPool& pool,
                          uint64_t ref, uint32_t shares, uint32_t price,
                          char side) noexcept {
@@ -143,6 +171,8 @@ static Order* make_order(OrderPool& pool,
 }
 
 void OrderBook::on_add(const itch::AddOrderMsg& msg) noexcept {
+    if (!is_open_) return;  // ignore pre/post-market orders
+
     const uint64_t ref    = itch::be64(msg.order_ref_num);
     const uint32_t shares = itch::be32(msg.shares);
     const uint32_t price  = itch::be32(msg.price);
@@ -155,6 +185,8 @@ void OrderBook::on_add(const itch::AddOrderMsg& msg) noexcept {
 }
 
 void OrderBook::on_add(const itch::AddOrderMPIDMsg& msg) noexcept {
+    if (!is_open_) return;
+
     const uint64_t ref    = itch::be64(msg.order_ref_num);
     const uint32_t shares = itch::be32(msg.shares);
     const uint32_t price  = itch::be32(msg.price);

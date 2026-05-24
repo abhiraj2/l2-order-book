@@ -38,6 +38,13 @@ class OrderBook {
 public:
     explicit OrderBook(std::size_t pool_size = kPoolSize);
 
+    // System Event ('S') — drives session state.
+    // 'O' = market open (start accepting orders)
+    // 'C' = market close (stop accepting orders)
+    // 'H' = trading halt (drain book, stop accepting orders)
+    // 'Q' = quote-only period; 'R' = resume
+    void on_system_event(const itch::SystemEventMsg& msg) noexcept;
+
     void on_add    (const itch::AddOrderMsg&              msg) noexcept;
     void on_add    (const itch::AddOrderMPIDMsg&          msg) noexcept;
     void on_execute(const itch::ExecuteOrderMsg&          msg) noexcept;
@@ -53,6 +60,7 @@ public:
     bool        has_order(uint64_t ref) const noexcept {
         return order_map_.count(ref) > 0;
     }
+    bool is_open() const noexcept { return is_open_; }
 
     const PriceLevel* bid_level(int idx) const noexcept;
     const PriceLevel* ask_level(int idx) const noexcept;
@@ -66,10 +74,11 @@ private:
     std::unordered_map<uint64_t, Order*>     order_map_;
     OrderPool                                pool_;
 
-    uint32_t bid_ref_     = 0;   // 0 = not yet initialised
-    uint32_t ask_ref_     = 0;
+    uint32_t bid_ref_      = 0;   // 0 = not yet initialised
+    uint32_t ask_ref_      = 0;
     int      best_bid_idx_ = -1;  // -1 = no bids
     int      best_ask_idx_ = -1;  // -1 = no asks
+    bool     is_open_      = false;
 
     int bid_idx(uint32_t price) const noexcept {
         return static_cast<int>(bid_ref_) - static_cast<int>(price);

@@ -1,0 +1,43 @@
+# AI tools
+.claude/
+.cursor/
+.cursorignore
+.cursorules
+.aider*
+.codeium/
+.github/copilot-instructions.md
+.tabnine/
+.continue/
+
+# Build
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+*.ninja
+*.ninja_deps
+*.ninja_log
+
+# Compiled objects and libraries
+*.o
+*.a
+*.so
+*.dylib
+*.dSYM/
+
+# ITCH data files (large, not for VCS — keep data/.gitkeep)
+data/*.bin
+data/*.gz
+data/*.bz2
+data/*.itch
+
+# macOS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
